@@ -1,4 +1,4 @@
-"""Personalized Prompt Optimizer v0.1 - FastAPI 主入口"""
+"""Personalized Prompt Optimizer v0.1.1 - FastAPI 主入口"""
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, HTMLResponse
@@ -11,203 +11,529 @@ from app.evaluator import evaluate
 from app.refiner import generate_critique_report
 
 app = FastAPI(
-    title="Personalized Prompt Optimizer v0.1",
+    title="Personalized Prompt Optimizer v0.1.1",
     description="反馈驱动的个性化提示词优化系统",
-    version="0.1.0",
+    version="0.1.1",
 )
 
 
-HTML_PAGE = r"""
-<!DOCTYPE html>
+HTML_PAGE = r"""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 回答优化器</title>
+<title>Personalized Prompt Optimizer</title>
 <style>
+  :root {
+    --bg-body: #0f1117;
+    --bg-panel: #171a21;
+    --bg-card: #1f2330;
+    --bg-input: #262b3a;
+    --border: #2d3342;
+    --border-hover: #3d4460;
+    --primary: #7c8cff;
+    --primary-dim: rgba(124,140,255,0.12);
+    --text: #e5e7eb;
+    --text-muted: #9ca3af;
+    --text-dim: #6b7280;
+    --success: #34d399;
+    --warning: #fbbf24;
+    --danger: #fb7185;
+    --radius: 8px;
+    --radius-lg: 12px;
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #f0f2f5; color: #333; line-height: 1.6; padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+    background: var(--bg-body);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
   }
-  .container { max-width: 900px; margin: 0 auto; }
-  h1 { text-align: center; color: #1a1a2e; margin-bottom: 8px; font-size: 28px; }
-  .subtitle { text-align: center; color: #666; margin-bottom: 24px; font-size: 14px; }
-  .card {
-    background: #fff; border-radius: 12px; padding: 24px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px;
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::selection { background: var(--primary-dim); color: var(--primary); }
+
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-panel);
   }
-  .card h2 { font-size: 18px; margin-bottom: 16px; color: #1a1a2e; }
-  .form-group { margin-bottom: 16px; }
-  label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; color: #444; }
-  label small { font-weight: 400; color: #999; }
-  textarea {
-    width: 100%; padding: 10px 12px; border: 1px solid #d9d9d9; border-radius: 8px;
-    font-size: 14px; font-family: inherit; resize: vertical; transition: border-color .2s;
+  .header-left h1 { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: 0.3px; }
+  .header-left .sub { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+  .header-right { display: flex; gap: 8px; }
+  .badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    color: var(--text-muted); font-weight: 500; letter-spacing: 0.2px;
   }
-  textarea:focus { outline: none; border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
-  textarea.sm { min-height: 60px; }
-  textarea.md { min-height: 100px; }
+  .badge.primary { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
+
+  .layout {
+    display: flex; gap: 0; height: calc(100vh - 55px);
+    max-width: 1600px; margin: 0 auto;
+  }
+  .panel {
+    padding: 20px; overflow-y: auto;
+  }
+  .panel-left {
+    width: 420px; min-width: 420px;
+    border-right: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+  .panel-right {
+    flex: 1; background: var(--bg-body);
+  }
+
+  .panel-title {
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 16px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block; font-size: 13px; font-weight: 500; color: var(--text);
+    margin-bottom: 4px;
+  }
+  .field label small { color: var(--text-dim); font-weight: 400; margin-left: 4px; }
+  .field textarea {
+    width: 100%; padding: 10px 12px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text);
+    font-size: 13px; font-family: inherit; resize: vertical;
+    transition: border-color 0.15s; line-height: 1.5;
+  }
+  .field textarea:focus {
+    outline: none; border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-dim);
+  }
+  .field textarea::placeholder { color: var(--text-dim); font-size: 12px; }
+  .field textarea.sm { min-height: 54px; }
+  .field textarea.md { min-height: 80px; }
+
+  .actions { display: flex; gap: 8px; margin-top: 20px; }
   .btn {
-    display: block; width: 100%; padding: 12px; border: none; border-radius: 8px;
-    font-size: 16px; font-weight: 600; cursor: pointer; transition: all .2s;
-    background: #4f46e5; color: #fff;
+    flex: 1; padding: 10px 16px; border: none; border-radius: var(--radius);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; font-family: inherit;
   }
-  .btn:hover { background: #4338ca; }
-  .btn:disabled { background: #a5b4fc; cursor: not-allowed; }
-  .loading { text-align: center; padding: 40px; display: none; }
+  .btn-primary {
+    background: var(--primary); color: #fff;
+  }
+  .btn-primary:hover { background: #6a7be8; }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--bg-card); color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--border-hover); color: var(--text); }
+  .btn-clear {
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--border); flex: 0 0 auto; padding: 10px 14px;
+  }
+  .btn-clear:hover { color: var(--danger); border-color: var(--danger); }
+  .btn-ghost {
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--border); padding: 4px 10px;
+    font-size: 11px; font-weight: 500; cursor: pointer;
+    border-radius: 4px; transition: all 0.15s;
+  }
+  .btn-ghost:hover { border-color: var(--text-muted); color: var(--text); }
+
+  .loading-overlay {
+    display: none; position: absolute; inset: 0;
+    background: rgba(15,17,23,0.85);
+    backdrop-filter: blur(2px); z-index: 10;
+    align-items: center; justify-content: center; flex-direction: column;
+    border-radius: var(--radius-lg);
+  }
+  .loading-overlay.show { display: flex; }
   .spinner {
-    width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top-color: #4f46e5;
-    border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 12px;
+    width: 28px; height: 28px; border: 2px solid var(--border);
+    border-top-color: var(--primary); border-radius: 50%;
+    animation: spin 0.7s linear infinite; margin-bottom: 12px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .result { display: none; }
-  .result .card { border-left: 4px solid #4f46e5; }
-  .result .card.best { border-left-color: #059669; background: #f0fdf4; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
-  .tab-btn {
-    flex: 1; padding: 8px; border: 1px solid #d9d9d9; border-radius: 6px;
-    background: #fff; cursor: pointer; font-size: 13px; font-weight: 600;
-    transition: all .2s; text-align: center;
+  .loading-text { font-size: 13px; color: var(--text-muted); }
+
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 100%; gap: 12px;
+    padding: 60px 40px; text-align: center;
   }
-  .tab-btn:hover { border-color: #4f46e5; }
-  .tab-btn.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
-  .tab-content { display: none; }
-  .tab-content.active { display: block; }
-  .score-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 12px 0; }
-  .score-item { background: #f9fafb; border-radius: 8px; padding: 12px; text-align: center; }
-  .score-item .label { font-size: 12px; color: #666; }
-  .score-item .value { font-size: 24px; font-weight: 700; color: #4f46e5; }
-  .content-box {
-    background: #f9fafb; border-radius: 8px; padding: 16px;
-    white-space: pre-wrap; font-size: 14px; line-height: 1.7; max-height: 400px; overflow-y: auto;
+  .empty-state .icon { font-size: 36px; opacity: 0.3; }
+  .empty-state h3 { font-size: 15px; color: var(--text-muted); font-weight: 500; }
+  .empty-state p { font-size: 13px; color: var(--text-dim); max-width: 360px; line-height: 1.7; }
+
+  .result-area { padding: 0; display: none; height: 100%; }
+  .result-area.show { display: block; }
+
+  .section { margin-bottom: 16px; }
+  .section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
   }
-  .error-msg { color: #dc2626; background: #fef2f2; padding: 12px; border-radius: 8px; display: none; }
-  .tag {
-    display: inline-block; padding: 2px 8px; border-radius: 4px;
-    font-size: 12px; font-weight: 600; margin-left: 6px;
+  .section-title {
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.6px;
   }
-  .tag-a { background: #dbeafe; color: #1e40af; }
-  .tag-b { background: #fce7f3; color: #9d174d; }
-  .tag-c { background: #d1fae5; color: #065f46; }
-  .meta { font-size: 13px; color: #888; margin-top: 4px; }
-  .weakness-item { padding: 8px 12px; margin: 4px 0; border-radius: 6px; background: #fefce8; font-size: 14px; }
-  pre { white-space: pre-wrap; word-break: break-word; }
-  @media (max-width: 600px) { .score-grid { grid-template-columns: repeat(2, 1fr); } }
+
+  .best-card {
+    background: linear-gradient(135deg, #1a2332 0%, #1f2330 100%);
+    border: 1px solid rgba(124,140,255,0.25);
+    border-radius: var(--radius-lg); padding: 20px;
+    position: relative;
+  }
+  .best-card::before {
+    content: 'BEST'; position: absolute; top: 10px; right: 14px;
+    font-size: 10px; font-weight: 700; letter-spacing: 1px;
+    color: var(--primary); opacity: 0.5;
+  }
+  .best-card .best-label {
+    font-size: 12px; color: var(--primary); font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .best-card .best-score {
+    font-size: 28px; font-weight: 700; color: var(--success);
+    margin-bottom: 12px;
+  }
+  .best-card .best-score small {
+    font-size: 14px; font-weight: 400; color: var(--text-muted);
+  }
+  .best-card .best-content {
+    font-size: 14px; line-height: 1.8; color: var(--text);
+    white-space: pre-wrap; max-height: 280px; overflow-y: auto;
+    padding: 12px; background: rgba(0,0,0,0.2);
+    border-radius: var(--radius); margin-top: 8px;
+  }
+  .best-card .best-prompt-preview {
+    margin-top: 12px; padding: 10px 12px;
+    background: rgba(0,0,0,0.15); border-radius: var(--radius);
+    font-size: 12px; color: var(--text-dim);
+    white-space: pre-wrap; max-height: 120px; overflow-y: auto;
+    border-left: 2px solid var(--border);
+  }
+
+  .card-panel {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .score-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .score-table th {
+    text-align: left; padding: 8px 10px;
+    color: var(--text-dim); font-weight: 500;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .score-table td {
+    padding: 8px 10px; border-bottom: 1px solid rgba(45,51,66,0.5);
+    color: var(--text);
+  }
+  .score-table tr.highlight td {
+    background: rgba(124,140,255,0.06);
+    border-bottom-color: var(--primary);
+  }
+  .score-table tr.highlight td:first-child {
+    border-left: 2px solid var(--primary);
+  }
+  .score-table .score-val { font-weight: 600; color: var(--text); }
+  .score-table .score-total { font-weight: 700; color: var(--primary); font-size: 15px; }
+
+  details.card-panel {
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  details.card-panel[open] { border-color: var(--border-hover); }
+  details.card-panel summary {
+    font-size: 13px; font-weight: 600; color: var(--text);
+    cursor: pointer; list-style: none; display: flex;
+    align-items: center; justify-content: space-between;
+  }
+  details.card-panel summary::-webkit-details-marker { display: none; }
+  details.card-panel summary::after {
+    content: '+'; font-size: 16px; color: var(--text-dim);
+    transition: transform 0.15s;
+  }
+  details.card-panel[open] summary::after { content: '−'; }
+  details.card-panel .detail-body {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 13px; line-height: 1.7; color: var(--text-muted);
+    white-space: pre-wrap; max-height: 400px; overflow-y: auto;
+  }
+  details.card-panel .detail-body.pre-wrap { white-space: pre-wrap; }
+
+  .critique-text {
+    font-size: 14px; line-height: 1.8; color: var(--text);
+    white-space: pre-wrap;
+  }
+
+  .weakness-list { list-style: none; }
+  .weakness-list li {
+    padding: 8px 0; border-bottom: 1px solid rgba(45,51,66,0.4);
+    font-size: 13px; color: var(--text-muted);
+  }
+  .weakness-list li:last-child { border-bottom: none; }
+  .weakness-list li strong { color: var(--text); }
+
+  .suggestion-item {
+    padding: 8px 12px; margin: 4px 0;
+    border-left: 2px solid var(--primary); font-size: 13px;
+    color: var(--text-muted); background: rgba(124,140,255,0.04);
+    border-radius: 0 var(--radius) var(--radius) 0;
+  }
+
+  .error-banner {
+    display: none; padding: 10px 14px;
+    background: rgba(251,113,133,0.1); border: 1px solid rgba(251,113,133,0.3);
+    border-radius: var(--radius); color: var(--danger);
+    font-size: 13px; margin-top: 12px;
+  }
+
+  .copy-row {
+    display: flex; gap: 6px; align-items: flex-start;
+  }
+  .copy-row .content-area { flex: 1; }
+
+  @media (max-width: 960px) {
+    .layout { flex-direction: column; height: auto; }
+    .panel-left { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); }
+    .panel-right { height: auto; }
+    .empty-state { padding: 40px 20px; }
+  }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--bg-card); border: 1px solid var(--border);
+    padding: 8px 18px; border-radius: var(--radius);
+    font-size: 13px; color: var(--text-muted);
+    opacity: 0; transition: opacity 0.25s; pointer-events: none;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>🧠 AI 回答优化器</h1>
-  <p class="subtitle">输入你的问题和个人信息，系统会生成 3 个不同策略的回答并选出最佳方案</p>
 
-  <div class="card">
-    <h2>📝 输入信息</h2>
-    <div class="form-group">
-      <label>你的问题 <small>你想问什么？</small></label>
-      <textarea id="question" class="md" placeholder="例如：我应该继续做现在的 SaaS 项目，还是转去做 AI 工具？">我应该继续做现在的 SaaS 项目，还是转去做 AI 工具？</textarea>
+<div class="header">
+  <div class="header-left">
+    <h1>Personalized Prompt Optimizer</h1>
+    <div class="sub">个性化提示词优化器</div>
+  </div>
+  <div class="header-right">
+    <span class="badge">v0.1.1</span>
+    <span class="badge">Local</span>
+    <span class="badge primary">LLM Judge</span>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- LEFT PANEL: INPUT -->
+  <div class="panel panel-left" style="position:relative">
+    <div class="panel-title">输入节点</div>
+
+    <div class="field">
+      <label>原始问题 <small>你想解决什么？</small></label>
+      <textarea id="question" class="md" placeholder="例如：我应该继续做 SaaS 项目，还是转去做 AI 工具？"></textarea>
     </div>
-    <div class="form-group">
-      <label>用户画像 <small>你的背景、经验、资源情况</small></label>
-      <textarea id="profile" class="sm" placeholder="例如：独立开发者，3 年后端经验，现金流有限">独立开发者，有 3 年后端经验，现金流有限，不喜欢重运营项目</textarea>
+    <div class="field">
+      <label>用户画像 <small>你的背景、经验、资源</small></label>
+      <textarea id="profile" class="sm" placeholder="例如：独立开发者，3 年后端经验，现金流有限，不喜欢重运营"></textarea>
     </div>
-    <div class="form-group">
-      <label>偏好 <small>你希望回答侧重什么？</small></label>
-      <textarea id="preferences" class="sm" placeholder="例如：希望答案直接、具体、偏商业可行性分析">希望答案直接、具体、偏商业可行性分析</textarea>
+    <div class="field">
+      <label>回答偏好 <small>希望侧重什么方向？</small></label>
+      <textarea id="preferences" class="sm" placeholder="例如：希望答案直接、具体、偏商业可行性分析"></textarea>
     </div>
-    <div class="form-group">
-      <label>排除项 <small>你不想看到什么内容？</small></label>
-      <textarea id="exclusions" class="sm" placeholder="例如：不要空泛鸡汤">不要空泛鸡汤，不要只说看兴趣，不要给过于宏大的战略建议</textarea>
+    <div class="field">
+      <label>排除项 <small>不希望看到什么？</small></label>
+      <textarea id="exclusions" class="sm" placeholder="例如：不要空泛鸡汤，不要只说看兴趣，不要宏大战略"></textarea>
     </div>
-    <div class="form-group">
-      <label>回答风格 <small>你希望的语气和调性</small></label>
-      <textarea id="style" class="sm" placeholder="例如：冷静、理性、批判性、可执行">冷静、理性、批判性、可执行</textarea>
+    <div class="field">
+      <label>回答风格 <small>希望的语气和调性</small></label>
+      <textarea id="style" class="sm" placeholder="例如：冷静、理性、批判性、可执行"></textarea>
     </div>
-    <button class="btn" id="submitBtn" onclick="submitOptimize()">🚀 开始优化</button>
-    <div class="error-msg" id="errorMsg"></div>
+
+    <div class="actions">
+      <button class="btn btn-primary" id="submitBtn" onclick="submitOptimize()">开始优化</button>
+      <button class="btn btn-secondary" onclick="fillSample()">填入示例</button>
+      <button class="btn btn-clear" onclick="clearInputs()" title="清空输入">✕</button>
+    </div>
+
+    <div class="error-banner" id="errorMsg"></div>
+
+    <div class="loading-overlay" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">正在生成候选提示词、回答和评分...</div>
+    </div>
   </div>
 
-  <div class="loading" id="loading">
-    <div class="spinner"></div>
-    <p>正在生成 3 个策略的回答，并评估最佳方案...</p>
-    <p class="meta">这可能需要 30-60 秒</p>
-  </div>
+  <!-- RIGHT PANEL: RESULTS -->
+  <div class="panel panel-right">
+    <div class="panel-title">优化结果</div>
 
-  <div class="result" id="result">
-    <div class="card best" id="bestSection">
-      <h2>🏆 最佳回答</h2>
-      <p class="meta">最佳策略: <strong id="bestLabel"></strong></p>
-      <div class="content-box" id="bestAnswer"></div>
+    <!-- Empty state -->
+    <div class="empty-state" id="emptyState">
+      <div class="icon">◈</div>
+      <h3>等待输入问题并启动优化</h3>
+      <p>系统会生成 3 个不同策略的候选提示词，分别调用 LLM 生成回答，并通过 LLM Judge 多维评分选出最佳版本。</p>
     </div>
 
-    <div class="card">
-      <h2>📊 评分对比</h2>
-      <div class="score-grid" id="scoreGrid"></div>
-      <div style="margin-top:12px; font-size:14px; color:#555;" id="comparisonSummary"></div>
-    </div>
+    <!-- Result area -->
+    <div class="result-area" id="resultArea">
 
-    <div class="card">
-      <h2>💬 三个回答对比</h2>
-      <div class="tabs">
-        <div class="tab-btn active" onclick="switchTab('A', this)">策略 A <span class="tag tag-a">执行型</span></div>
-        <div class="tab-btn" onclick="switchTab('B', this)">策略 B <span class="tag tag-b">批判型</span></div>
-        <div class="tab-btn" onclick="switchTab('C', this)">策略 C <span class="tag tag-c">顾问型</span></div>
+      <!-- BEST -->
+      <div class="best-card" id="bestSection">
+        <div class="best-label" id="bestLabel">—</div>
+        <div class="best-score"><span id="bestScoreNum">0.0</span> <small>/ 10</small></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button class="btn-ghost" onclick="copyText('bestAnswer')">复制回答</button>
+          <button class="btn-ghost" onclick="copyText('bestPromptPreview')">复制提示词</button>
+        </div>
+        <div class="best-content" id="bestAnswer"></div>
+        <div class="best-prompt-preview" id="bestPromptPreview"></div>
       </div>
-      <div class="tab-content active" id="tabA">
-        <div class="content-box" id="answerA"></div>
+
+      <!-- SCORES -->
+      <div class="card-panel">
+        <div class="section-header"><span class="section-title">评分对比</span></div>
+        <div style="overflow-x:auto">
+          <table class="score-table" id="scoreTable">
+            <thead>
+              <tr><th>候选</th><th>相关性</th><th>个性化</th><th>具体性</th><th>可执行</th><th>非模板</th><th>遵守约束</th><th>总分</th></tr>
+            </thead>
+            <tbody id="scoreBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--text-dim);line-height:1.6" id="comparisonSummary"></div>
       </div>
-      <div class="tab-content" id="tabB">
-        <div class="content-box" id="answerB"></div>
+
+      <!-- PROMPT CANDIDATES -->
+      <div class="section">
+        <div class="section-header"><span class="section-title">候选提示词</span></div>
+        <details class="card-panel" id="promptA">
+          <summary>候选 A：具体执行型</summary>
+          <div class="detail-body pre-wrap" id="promptAContent"></div>
+        </details>
+        <details class="card-panel" id="promptB">
+          <summary>候选 B：反模板批判型</summary>
+          <div class="detail-body pre-wrap" id="promptBContent"></div>
+        </details>
+        <details class="card-panel" id="promptC">
+          <summary>候选 C：决策顾问型</summary>
+          <div class="detail-body pre-wrap" id="promptCContent"></div>
+        </details>
       </div>
-      <div class="tab-content" id="tabC">
-        <div class="content-box" id="answerC"></div>
+
+      <!-- ANSWERS -->
+      <div class="section">
+        <div class="section-header"><span class="section-title">三个回答</span></div>
+        <details class="card-panel" id="ansA">
+          <summary>回答 A：具体执行型</summary>
+          <div class="detail-body" id="answerAContent"></div>
+        </details>
+        <details class="card-panel" id="ansB">
+          <summary>回答 B：反模板批判型</summary>
+          <div class="detail-body" id="answerBContent"></div>
+        </details>
+        <details class="card-panel" id="ansC">
+          <summary>回答 C：决策顾问型</summary>
+          <div class="detail-body" id="answerCContent"></div>
+        </details>
       </div>
-    </div>
 
-    <div class="card">
-      <h2>🔍 各回答不足</h2>
-      <div id="weaknesses"></div>
-    </div>
+      <!-- CRITIQUE -->
+      <div class="card-panel">
+        <div class="section-header"><span class="section-title">批判报告</span></div>
+        <div class="critique-text" id="critiqueReport">暂无</div>
+      </div>
 
-    <div class="card">
-      <h2>📋 批判报告</h2>
-      <div class="content-box" id="critiqueReport"></div>
-    </div>
+      <!-- NEXT PROMPT -->
+      <div class="card-panel">
+        <div class="section-header">
+          <span class="section-title">下一轮优化提示词</span>
+          <button class="btn-ghost" onclick="copyText('nextPromptContent')">复制</button>
+        </div>
+        <div class="detail-body pre-wrap" id="nextPromptContent" style="margin-top:8px;border-top:1px solid var(--border);padding-top:12px"></div>
+      </div>
 
-    <div class="card">
-      <h2>🔄 下一轮优化提示词</h2>
-      <div class="content-box" id="nextPrompt"></div>
-    </div>
+      <!-- SUGGESTIONS -->
+      <div class="card-panel">
+        <div class="section-header"><span class="section-title">优化建议</span></div>
+        <div id="suggestionsList"></div>
+      </div>
 
-    <div class="card">
-      <h2>💡 优化建议</h2>
-      <div id="suggestions"></div>
     </div>
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
+function fillSample() {
+  document.getElementById('question').value = '我应该继续做现在的 SaaS 项目，还是转去做 AI 工具？';
+  document.getElementById('profile').value = '独立开发者，有 3 年后端经验，现金流有限，不喜欢重运营项目';
+  document.getElementById('preferences').value = '希望答案直接、具体、偏商业可行性分析';
+  document.getElementById('exclusions').value = '不要空泛鸡汤，不要只说看兴趣，不要给过于宏大的战略建议';
+  document.getElementById('style').value = '冷静、理性、批判性、可执行';
+}
+
+function clearInputs() {
+  document.querySelectorAll('.panel-left textarea').forEach(t => t.value = '');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+function copyText(id) {
+  const el = document.getElementById(id);
+  const text = el.textContent || el.innerText;
+  navigator.clipboard.writeText(text.trim()).then(() => showToast('已复制')).catch(() => showToast('复制失败'));
+}
+
 async function submitOptimize() {
   const btn = document.getElementById('submitBtn');
   const loading = document.getElementById('loading');
-  const result = document.getElementById('result');
+  const emptyState = document.getElementById('emptyState');
+  const resultArea = document.getElementById('resultArea');
   const errorMsg = document.getElementById('errorMsg');
 
+  const question = document.getElementById('question').value.trim();
+  const profile = document.getElementById('profile').value.trim();
+  const preferences = document.getElementById('preferences').value.trim();
+  const exclusions = document.getElementById('exclusions').value.trim();
+  const style = document.getElementById('style').value.trim();
+
+  if (!question || !profile || !preferences || !exclusions || !style) {
+    errorMsg.textContent = '所有字段均为必填，请完整填写';
+    errorMsg.style.display = 'block';
+    return;
+  }
+
   errorMsg.style.display = 'none';
-  result.style.display = 'none';
+  resultArea.classList.remove('show');
   btn.disabled = true;
-  loading.style.display = 'block';
+  loading.classList.add('show');
 
   try {
     const res = await fetch('/optimize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        original_question: document.getElementById('question').value.trim(),
-        user_profile: document.getElementById('profile').value.trim(),
-        preferences: document.getElementById('preferences').value.trim(),
-        exclusions: document.getElementById('exclusions').value.trim(),
-        answer_style: document.getElementById('style').value.trim()
+        original_question: question,
+        user_profile: profile,
+        preferences: preferences,
+        exclusions: exclusions,
+        answer_style: style
       })
     });
 
@@ -219,82 +545,81 @@ async function submitOptimize() {
     const data = await res.json();
     displayResult(data);
   } catch (err) {
-    errorMsg.textContent = '❌ ' + err.message;
+    errorMsg.textContent = err.message;
     errorMsg.style.display = 'block';
   } finally {
     btn.disabled = false;
-    loading.style.display = 'none';
+    loading.classList.remove('show');
   }
 }
 
 function displayResult(data) {
   const jr = data.judge_result;
   const bestId = jr.best_answer_id;
+  const bestLabel = bestId === 'A' ? 'A · 具体执行型' : bestId === 'B' ? 'B · 反模板批判型' : 'C · 决策顾问型';
+  const bestScore = jr.scores[bestId]?.total_score || 0;
 
-  // 最佳回答
-  document.getElementById('bestLabel').textContent = bestId === 'A' ? 'A - 具体执行型' : bestId === 'B' ? 'B - 反模板批判型' : 'C - 决策顾问型';
-  document.getElementById('bestAnswer').textContent = data.best_answer;
+  document.getElementById('bestLabel').textContent = '最佳策略：' + bestLabel;
+  document.getElementById('bestScoreNum').textContent = bestScore.toFixed(1);
+  document.getElementById('bestAnswer').textContent = data.best_answer || '';
+  document.getElementById('bestPromptPreview').textContent = data.best_prompt || '';
 
-  // 评分
-  const scoreGrid = document.getElementById('scoreGrid');
-  scoreGrid.innerHTML = '';
-  for (const [id, sc] of Object.entries(jr.scores)) {
-    const label = id === 'A' ? 'A · 执行型' : id === 'B' ? 'B · 批判型' : 'C · 顾问型';
-    const highlight = id === bestId ? ' style="background:#f0fdf4;border:2px solid #059669;"' : '';
-    scoreGrid.innerHTML += `
-      <div class="score-item"${highlight}>
-        <div class="label">${label}</div>
-        <div class="value">${sc.total_score.toFixed(1)}</div>
-        <div style="font-size:11px;color:#999;margin-top:4px;">
-          R${sc.relevance} P${sc.personalization} S${sc.specificity}<br>
-          A${sc.actionability} N${sc.non_generic} C${sc.constraint_following}
-        </div>
-      </div>`;
-  }
-  document.getElementById('comparisonSummary').textContent = jr.comparison_summary;
-
-  // 三个回答
-  document.getElementById('answerA').textContent = data.answers.A || '生成失败';
-  document.getElementById('answerB').textContent = data.answers.B || '生成失败';
-  document.getElementById('answerC').textContent = data.answers.C || '生成失败';
-
-  // 弱点
-  const weaknessesDiv = document.getElementById('weaknesses');
-  weaknessesDiv.innerHTML = '';
-  for (const [id, w] of Object.entries(jr.main_weaknesses)) {
-    const label = id === 'A' ? 'A · 执行型' : id === 'B' ? 'B · 批判型' : 'C · 顾问型';
-    weaknessesDiv.innerHTML += `<div class="weakness-item"><strong>${label}</strong>：${w}</div>`;
+  // Score table
+  const tbody = document.getElementById('scoreBody');
+  tbody.innerHTML = '';
+  const labels = { A: 'A · 执行型', B: 'B · 批判型', C: 'C · 顾问型' };
+  for (const id of ['A','B','C']) {
+    const sc = jr.scores[id] || {};
+    const highlight = id === bestId ? ' class="highlight"' : '';
+    tbody.innerHTML += `<tr${highlight}>
+      <td><strong>${labels[id]}</strong></td>
+      <td class="score-val">${sc.relevance||'-'}</td>
+      <td class="score-val">${sc.personalization||'-'}</td>
+      <td class="score-val">${sc.specificity||'-'}</td>
+      <td class="score-val">${sc.actionability||'-'}</td>
+      <td class="score-val">${sc.non_generic||'-'}</td>
+      <td class="score-val">${sc.constraint_following||'-'}</td>
+      <td class="score-total">${(sc.total_score||0).toFixed(1)}</td>
+    </tr>`;
   }
 
-  // 批判报告
+  document.getElementById('comparisonSummary').textContent = jr.comparison_summary || '';
+
+  // Prompt candidates
+  document.getElementById('promptAContent').textContent = data.prompt_candidates?.A || '';
+  document.getElementById('promptBContent').textContent = data.prompt_candidates?.B || '';
+  document.getElementById('promptCContent').textContent = data.prompt_candidates?.C || '';
+
+  // Answers
+  document.getElementById('answerAContent').textContent = data.answers?.A || '';
+  document.getElementById('answerBContent').textContent = data.answers?.B || '';
+  document.getElementById('answerCContent').textContent = data.answers?.C || '';
+
+  // Critique
   document.getElementById('critiqueReport').textContent = data.critique_report || '暂无';
 
-  // 下一轮提示词
-  document.getElementById('nextPrompt').textContent = data.next_iteration_prompt || '暂无';
+  // Next prompt
+  document.getElementById('nextPromptContent').textContent = data.next_iteration_prompt || '暂无';
 
-  // 优化建议
-  const suggestionsDiv = document.getElementById('suggestions');
-  suggestionsDiv.innerHTML = '';
+  // Suggestions
+  const sugDiv = document.getElementById('suggestionsList');
+  sugDiv.innerHTML = '';
   if (jr.prompt_improvement_suggestions && jr.prompt_improvement_suggestions.length) {
     jr.prompt_improvement_suggestions.forEach(s => {
-      suggestionsDiv.innerHTML += `<div class="weakness-item" style="background:#eff6ff;">💡 ${s}</div>`;
+      sugDiv.innerHTML += '<div class="suggestion-item">' + s + '</div>';
     });
   }
 
-  document.getElementById('result').style.display = 'block';
-  document.getElementById('result').scrollIntoView({ behavior: 'smooth' });
-}
+  // Close all details
+  document.querySelectorAll('details.card-panel').forEach(d => d.removeAttribute('open'));
 
-function switchTab(id, btn) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('tab' + id).classList.add('active');
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('resultArea').classList.add('show');
+  document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
 }
 </script>
 </body>
-</html>
-"""
+</html>"""
 
 
 @app.get("/", response_class=HTMLResponse)

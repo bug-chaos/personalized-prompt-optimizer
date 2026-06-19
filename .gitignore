@@ -13,3 +13,10 @@ build/
 # IDE
 .vscode/
 .idea/
+
+# Project status (not for remote)
+PROJECT_STATUS.md
+
+# Runtime
+debug.log
+site-packages/
